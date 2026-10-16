@@ -35,6 +35,9 @@ import {
   X,
 } from 'lucide-react';
 import { useNews } from '../context/NewsContext';
+import { Logo } from './Logo';
+import { normalizeBroadcastUrl } from '../utils/broadcast';
+import { BroadcastFramingControls } from './BroadcastFramingControls';
 import {
   JournalistNewsSubmission,
   JournalistUser,
@@ -46,6 +49,7 @@ import {
 export const AdminPortal: React.FC = () => {
   const {
     isAdminOpen,
+    setActiveCategory,
     setIsAdminOpen,
     setIsLivePlayerOpen,
     activeLiveStream,
@@ -128,7 +132,7 @@ export const AdminPortal: React.FC = () => {
   const [streamTitle, setStreamTitle] = useState(activeLiveStream.title);
   const [streamChannel, setStreamChannel] = useState(activeLiveStream.channelName);
   const [streamUrl, setStreamUrl] = useState(activeLiveStream.streamUrl);
-  const [streamType, setStreamType] = useState<'youtube' | 'hls' | 'mp4'>('youtube');
+  const [streamError, setStreamError] = useState('');
   const [streamViewers, setStreamViewers] = useState(activeLiveStream.viewerCount);
   const [streamQuality, setStreamQuality] = useState(activeLiveStream.quality);
 
@@ -288,40 +292,29 @@ export const AdminPortal: React.FC = () => {
   // Save URL Stream
   const handleSaveUrlStream = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!streamUrl.trim()) return;
-
-    let finalUrl = streamUrl.trim();
-    let detectedType: 'youtube' | 'hls' | 'mp4' = streamType;
-
-    if (finalUrl.includes('youtube.com') || finalUrl.includes('youtu.be')) {
-      detectedType = 'youtube';
-      if (!finalUrl.includes('embed/')) {
-        let videoId = '';
-        if (finalUrl.includes('v=')) {
-          videoId = finalUrl.split('v=')[1]?.split('&')[0] || '';
-        } else if (finalUrl.includes('youtu.be/')) {
-          videoId = finalUrl.split('youtu.be/')[1]?.split('?')[0] || '';
-        }
-        if (videoId) {
-          finalUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0`;
-        }
-      }
-    } else if (finalUrl.endsWith('.m3u8')) {
-      detectedType = 'hls';
+    setStreamError('');
+    let source: ReturnType<typeof normalizeBroadcastUrl>;
+    try {
+      source = normalizeBroadcastUrl(streamUrl);
+    } catch (error) {
+      setStreamError(error instanceof Error ? error.message : 'Invalid video URL.');
+      return;
     }
 
     addLiveStream({
       title: streamTitle.trim() || 'AV News Today 24x7 HD LIVE',
       channelName: streamChannel.trim() || 'AV News Today HD',
-      streamUrl: finalUrl,
-      streamType: detectedType,
+      ...source,
       isActive: true,
       viewerCount: Number(streamViewers) || 48000,
       quality: streamQuality || '1080p HD',
       category: 'live-news',
     });
 
-    showToast('Live stream URL updated and set to ACTIVE on the Live Player!');
+    setActiveCategory('home');
+    setIsLivePlayerOpen(false);
+    setIsAdminOpen(false);
+    setTimeout(() => document.getElementById('live-broadcast-screen')?.scrollIntoView({ behavior: 'smooth' }), 50);
   };
 
   // Save Overlays
@@ -410,12 +403,7 @@ export const AdminPortal: React.FC = () => {
         {/* Header */}
         <div className="bg-[#070e1e] border-b border-blue-900/60 p-4 sm:px-6 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
-            <img
-              src="/src/assets/images/av_news_today_logo_1792069389589.jpg"
-              alt="AV News Today Logo"
-              referrerPolicy="no-referrer"
-              className="w-10 h-10 rounded-full border-2 border-amber-400 shadow-md object-cover shrink-0"
-            />
+            <Logo size="sm" showRing={false} />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black text-red-500 uppercase tracking-wider">
@@ -463,7 +451,7 @@ export const AdminPortal: React.FC = () => {
         )}
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto p-2.5 bg-[#081022] border-b border-blue-900/40 text-xs shrink-0 scrollbar-none">
+        <div className="grid grid-cols-1 min-[440px]:grid-cols-2 lg:grid-cols-3 gap-1 p-2.5 bg-[#081022] border-b border-blue-900/40 text-xs shrink-0 max-h-[32vh] overflow-y-auto" role="tablist" aria-label="Admin sections">
           {[
             { id: 'live-studio', label: '🔴 LIVE BROADCAST STUDIO', icon: Radio },
             {
@@ -504,14 +492,16 @@ export const AdminPortal: React.FC = () => {
             return (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={isCur}
                 onClick={() => setActiveAdminTab(tab.id as any)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all ${
+                className={`flex min-w-0 items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-left cursor-pointer transition-all ${
                   isCur
                     ? 'bg-gradient-to-r from-red-600 to-blue-600 text-white shadow-lg'
                     : 'bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span>{tab.label}</span>
               </button>
             );
@@ -519,12 +509,13 @@ export const AdminPortal: React.FC = () => {
         </div>
 
         {/* Tab Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6">
           {/* ========================================================= */}
           {/* TAB 1: LIVE BROADCAST STUDIO */}
           {/* ========================================================= */}
           {activeAdminTab === 'live-studio' && (
             <div className="space-y-6">
+              <BroadcastFramingControls />
               {/* Broadcast Mode Selector */}
               <div className="bg-[#081126] border border-blue-900/60 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <span className="text-xs font-black text-amber-400 tracking-wider">
@@ -609,13 +600,13 @@ export const AdminPortal: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Live Stream URL (YouTube Embed / HLS .m3u8 / MP4 Direct)
+                      Live Stream URL (YouTube video / HLS .m3u8 / MP4 Direct)
                     </label>
                     <input
                       type="text"
                       value={streamUrl}
                       onChange={(e) => setStreamUrl(e.target.value)}
-                      placeholder="e.g. https://www.youtube.com/embed/jfKfPfyJRdk or https://.../playlist.m3u8"
+                      placeholder="Paste a YouTube video link, HLS feed, or MP4 URL"
                       className="w-full bg-slate-950 border border-blue-900/60 rounded-lg p-2 text-xs text-white font-mono"
                     />
                     <div className="flex flex-wrap gap-2 mt-2">
@@ -643,6 +634,8 @@ export const AdminPortal: React.FC = () => {
                     </div>
                   </div>
 
+                  {streamError && <p role="alert" className="text-xs text-red-400">{streamError}</p>}
+                  <p className="text-[11px] text-slate-400">YouTube starts muted. Use the player controls to turn on sound.</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">

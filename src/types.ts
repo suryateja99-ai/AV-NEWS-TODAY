@@ -41,6 +41,7 @@ export interface LiveStreamConfig {
   channelName: string;
   streamUrl: string;
   streamType: StreamType;
+  youtubePlaylist?: string[];
   isActive: boolean;
   viewerCount: number;
   quality: string;
@@ -49,6 +50,12 @@ export interface LiveStreamConfig {
 }
 
 export interface BroadcastSettings {
+  videoFraming?: {
+    zoomX: number;
+    zoomY: number;
+    focusX: number;
+    focusY: number;
+  };
   channelLogoUrl?: string;
   topTickerText: string;
   bottomTickerText: string;

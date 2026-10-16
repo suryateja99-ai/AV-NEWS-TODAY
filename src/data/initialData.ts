@@ -50,12 +50,24 @@ export const INITIAL_BROADCAST_SETTINGS: BroadcastSettings = {
 
 export const INITIAL_LIVE_STREAMS: LiveStreamConfig[] = [
   {
+    id: 'stream-avnews-loop-20261016',
+    title: 'AV News Today — Continuous Broadcast',
+    channelName: 'AV News Today HD',
+    streamUrl: 'https://www.youtube.com/embed/hR0iPLcbebM?autoplay=1&mute=1&playsinline=1',
+    streamType: 'youtube',
+    youtubePlaylist: ['hR0iPLcbebM', 'bgcN5oZPN24', 'HO6o6BZ22JE'],
+    isActive: true,
+    viewerCount: 48250,
+    quality: '1080p HD',
+    category: 'live-news',
+  },
+  {
     id: 'stream-avnews-main',
     title: 'AV News Today 24x7 HD LIVE - సత్యం కోసం... సమాజం కోసం...',
     channelName: 'AV News Today HD',
     streamUrl: 'https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=0',
     streamType: 'youtube',
-    isActive: true,
+    isActive: false,
     viewerCount: 48250,
     quality: '1080p HD 60fps',
     category: 'live-news',

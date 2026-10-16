@@ -27,6 +27,8 @@ import { useNews } from '../context/NewsContext';
 import { INITIAL_EPG_PROGRAMS } from '../data/initialData';
 import { GoldenMicIcon } from './GoldenMicIcon';
 import { Logo } from './Logo';
+import { PlayerBranding } from './PlayerBranding';
+import { YouTubeLivePlayer } from './YouTubeLivePlayer';
 
 export const LivePlayerModal: React.FC = () => {
   const {
@@ -40,7 +42,6 @@ export const LivePlayerModal: React.FC = () => {
     chatMessages,
     addChatMessage,
     activeLiveCameraStream,
-    isCameraBroadcasting,
   } = useNews();
 
   const [activeTab, setActiveTab] = useState<'chat' | 'schedule' | 'channels' | 'reporter'>('chat');
@@ -59,6 +60,7 @@ export const LivePlayerModal: React.FC = () => {
           minute: '2-digit',
           second: '2-digit',
           hour12: true,
+          timeZone: 'Asia/Kolkata',
         })
       );
     };
@@ -73,8 +75,7 @@ export const LivePlayerModal: React.FC = () => {
 
   const isStudioCameraActive =
     (activeLiveStream.id === 'stream-live-studio-cam' ||
-      activeLiveStream.streamType === 'webrtc' ||
-      isCameraBroadcasting) &&
+      activeLiveStream.streamType === 'webrtc') &&
     Boolean(activeLiveCameraStream);
 
   // Auto-scroll chat
@@ -99,7 +100,7 @@ export const LivePlayerModal: React.FC = () => {
       video.srcObject = null;
     }
 
-    if (activeLiveStream.streamType === 'hls' && activeLiveStream.streamUrl.endsWith('.m3u8')) {
+    if (activeLiveStream.streamType === 'hls') {
       if (Hls.isSupported()) {
         const hls = new Hls({ enableWorker: true });
         hls.loadSource(activeLiveStream.streamUrl);
@@ -252,9 +253,13 @@ export const LivePlayerModal: React.FC = () => {
                 playsInline
                 className="w-full h-full object-contain"
               ></video>
+            ) : activeLiveStream.streamType === 'youtube' ? (
+              <YouTubeLivePlayer stream={activeLiveStream} />
+            ) : ['hls', 'mp4'].includes(activeLiveStream.streamType) ? (
+              <video ref={videoRef} controls autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain" />
             ) : (
               /* Broadcast Standby Live Screen: "త్వరలో... (Coming Soon)" in Telugu */
-              <div className="relative w-full h-full min-h-[320px] flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center overflow-hidden bg-gradient-to-br from-[#020614] via-[#081533] to-[#030818] select-none">
+              <div className="relative w-full h-full min-h-[320px] flex-1 flex flex-col items-center justify-center px-4 pb-6 pt-28 sm:px-6 sm:pt-24 text-center overflow-hidden bg-gradient-to-br from-[#020614] via-[#081533] to-[#030818] select-none">
                 {/* Tech Radar / Grid Overlay Background */}
                 <div className="absolute inset-0 bg-[radial-gradient(#1e3a8a_1px,transparent_1px)] [background-size:22px_22px] opacity-35 pointer-events-none"></div>
 
@@ -282,7 +287,7 @@ export const LivePlayerModal: React.FC = () => {
 
                   {/* Channel Logo & Main 'త్వరలో...' Telugu Typography */}
                   <div className="flex flex-col items-center space-y-2 py-1">
-                    <Logo size="xl" showRing={true} showGlow={true} alt="AV News Today Logo" />
+
                     <div className="space-y-1">
                       <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-100 to-amber-400 drop-shadow-[0_4px_28px_rgba(245,158,11,0.65)] font-serif">
                         త్వరలో...
@@ -328,30 +333,12 @@ export const LivePlayerModal: React.FC = () => {
               </div>
             )}
 
-            {/* Broadcast TV Watermark Logo Overlay (Top Left) */}
             {broadcastSettings.isChannelLogoVisible && (
-              <div className="absolute top-4 left-4 z-20 pointer-events-none flex items-center gap-2 drop-shadow-lg">
-                <div className="flex items-center gap-1.5 bg-black/80 backdrop-blur-sm px-2 py-1 rounded-lg border border-blue-500/40 shadow-lg">
-                  <Logo size="xs" showRing={false} alt="AV News Today Logo" />
-                  <span className="bg-red-600 text-white font-black text-xs px-1.5 py-0.5 rounded-l">
-                    AV
-                  </span>
-                  <span className="text-white font-black text-xs px-1.5 py-0.5 flex items-center gap-1">
-                    <span>NEWS</span>
-                    <span className="text-red-500">TODAY</span>
-                  </span>
-                  {broadcastSettings.isLiveBadgeVisible && (
-                    <span className="ml-1 flex items-center gap-1 text-[10px] font-black text-red-500">
-                      <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
-                      <span>LIVE</span>
-                    </span>
-                  )}
-                </div>
-              </div>
+              <PlayerBranding time={digitalTime} showLive={broadcastSettings.isLiveBadgeVisible} />
             )}
 
-            {/* Quality & Live indicator (Top Right) */}
-            <div className="absolute top-4 right-4 z-20 pointer-events-none flex items-center gap-2">
+            {/* Quality indicator (Top Left) */}
+            <div className="absolute top-4 left-4 z-20 pointer-events-none flex items-center gap-2">
               <span className="bg-black/70 backdrop-blur-sm text-[10px] font-mono font-bold text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">
                 {activeLiveStream.quality}
               </span>

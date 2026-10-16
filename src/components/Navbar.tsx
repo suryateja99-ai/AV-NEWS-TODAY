@@ -6,6 +6,7 @@ import {
   Globe,
   IdCard,
   LogIn,
+  LogOut,
   Mic,
   PlusCircle,
   Radio,
@@ -30,6 +31,7 @@ export const Navbar: React.FC = () => {
     setSearchQuery,
     setSelectedLocation,
     currentUser,
+    logoutJournalist,
     setIsAuthModalOpen,
     setAuthModalMode,
     setIsProfileModalOpen,
@@ -92,42 +94,22 @@ export const Navbar: React.FC = () => {
   return (
     <header className="sticky top-0 z-40 bg-[#060b18] border-b border-blue-900/40 shadow-2xl">
       {/* Top Main Branding Bar */}
-      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {/* Brand Identity */}
-        <div
+        <button
+          type="button"
           onClick={() => handleNavClick('home')}
-          className="flex items-center gap-3 cursor-pointer group select-none"
+          aria-label="AV News Today home"
+          className="flex items-center gap-4 cursor-pointer group select-none text-left shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-400"
         >
-          {/* Exact Logo of the Page */}
-          <div className="relative shrink-0 flex items-center justify-center">
-            <Logo
-              size="md"
-              showRing={true}
-              showGlow={true}
-              className="group-hover:scale-105 transition-all duration-200"
-            />
-          </div>
-
-          {/* Logo Mark & Title */}
-          <div className="relative flex items-center">
-            {/* Satellite Signal Icon on Top */}
-            <div className="absolute -top-2 left-3 flex items-center gap-0.5 text-red-500 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
-              <span className="text-[9px] font-black tracking-tighter">(•)</span>
-            </div>
-            <div className="flex items-center">
-              <div className="bg-red-600 text-white font-black px-2 py-0.5 text-2xl tracking-tighter rounded-l-md shadow-md border-r border-red-700">
-                AV
-              </div>
-              <div className="bg-slate-900 text-white font-black px-2.5 py-0.5 text-2xl tracking-wider rounded-r-md border border-slate-700 flex items-center gap-1.5">
-                <span className="text-white">NEWS</span>
-                <span className="text-red-500">TODAY</span>
-              </div>
-            </div>
-          </div>
+          <Logo
+            size="custom"
+            showRing={false}
+            className="w-36 h-18 sm:w-48 sm:h-24 transition-transform duration-200 group-hover:scale-[1.02]"
+          />
 
           {/* Sub Tagline */}
-          <div className="hidden sm:flex flex-col text-[11px] font-semibold text-slate-400 leading-tight">
+          <div className="hidden xl:flex flex-col text-[11px] font-semibold text-slate-400 leading-tight">
             <span className="tracking-widest uppercase text-slate-300 font-bold">
               NEWS • TELANGANA • INDIA • WORLD
             </span>
@@ -135,10 +117,10 @@ export const Navbar: React.FC = () => {
               Ayudh Vikas Foundation Digital Network
             </span>
           </div>
-        </div>
+        </button>
 
         {/* Right Action Items */}
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 ml-auto">
           {/* Search Trigger */}
           <div className="relative">
             {isSearchOpen ? (
@@ -216,7 +198,7 @@ export const Navbar: React.FC = () => {
 
           {/* Journalist Sign In / Profile Section */}
           {currentUser ? (
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => setIsUploadNewsModalOpen(true)}
                 className="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black px-3 py-1.5 rounded-lg text-[11px] shadow cursor-pointer transition-transform hover:scale-105"
@@ -257,6 +239,15 @@ export const Navbar: React.FC = () => {
                 </div>
                 <IdCard className="w-3.5 h-3.5 text-amber-400 xl:hidden" />
               </button>
+              <button
+                type="button"
+                onClick={logoutJournalist}
+                className="flex items-center gap-1.5 border border-red-500/40 bg-red-950/40 hover:bg-red-900/60 text-red-200 px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                title="Log out of journalist account"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>LOGOUT</span>
+              </button>
             </div>
           ) : (
             <button
@@ -268,8 +259,7 @@ export const Navbar: React.FC = () => {
               title="Journalist Sign In or Register with Govt Proof"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">SIGN IN / REGISTER</span>
-              <span className="sm:hidden">LOGIN</span>
+              <span>LOGIN</span>
             </button>
           )}
 
@@ -301,24 +291,26 @@ export const Navbar: React.FC = () => {
           </button>
 
           {/* Prominent Red pulsating ((•)) LIVE Button */}
-          <button
-            onClick={() => {
-              if (activeCategory !== 'home') {
-                setActiveCategory('home');
-              }
-              setTimeout(() => {
-                document.getElementById('live-broadcast-screen')?.scrollIntoView({ behavior: 'smooth' });
-              }, 50);
-            }}
-            className="group relative flex items-center gap-2 bg-gradient-to-r from-red-600 via-red-500 to-rose-600 hover:from-red-500 hover:to-red-600 text-white font-black px-4 py-1.5 rounded-full text-xs tracking-wider shadow-lg shadow-red-600/50 cursor-pointer transition-all hover:scale-105 active:scale-95"
-            title="Watch Live Broadcast Directly on Home Page"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-            </span>
-            <span>((•)) LIVE</span>
-          </button>
+          {!currentUser && (
+            <button
+              onClick={() => {
+                if (activeCategory !== 'home') {
+                  setActiveCategory('home');
+                }
+                setTimeout(() => {
+                  document.getElementById('live-broadcast-screen')?.scrollIntoView({ behavior: 'smooth' });
+                }, 50);
+              }}
+              className="group relative flex items-center gap-2 bg-gradient-to-r from-red-600 via-red-500 to-rose-600 hover:from-red-500 hover:to-red-600 text-white font-black px-4 py-1.5 rounded-full text-xs tracking-wider shadow-lg shadow-red-600/50 cursor-pointer transition-all hover:scale-105 active:scale-95"
+              title="Watch Live Broadcast Directly on Home Page"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+              </span>
+              <span>((•)) LIVE</span>
+            </button>
+          )}
         </div>
       </div>
 

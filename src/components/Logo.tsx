@@ -20,11 +20,11 @@ export const Logo: React.FC<LogoProps> = ({
 
   // Size mappings for consistent broadcast presentation
   const sizeClasses = {
-    xs: 'w-6 h-6',
-    sm: 'w-8 h-8',
-    md: 'w-11 h-11 sm:w-12 sm:h-12',
-    lg: 'w-16 h-16 sm:w-20 sm:h-20',
-    xl: 'w-24 h-24 sm:w-28 sm:h-28',
+    xs: 'w-12 h-6',
+    sm: 'w-16 h-8',
+    md: 'w-22 h-11 sm:w-24 sm:h-12',
+    lg: 'w-32 h-16 sm:w-40 sm:h-20',
+    xl: 'w-48 h-24 sm:w-56 sm:h-28',
     custom: '',
   };
 
@@ -51,7 +51,7 @@ export const Logo: React.FC<LogoProps> = ({
           target.src = '/logo.jpg';
         }
       }}
-      className={`rounded-full object-contain bg-slate-950 p-0.5 shrink-0 ${sizeClasses[size]} ${ringClasses} ${glowClasses} ${className}`}
+      className={`rounded-md object-contain bg-white shrink-0 ${sizeClasses[size]} ${ringClasses} ${glowClasses} ${className}`}
     />
   );
 };

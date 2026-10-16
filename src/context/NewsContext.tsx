@@ -202,7 +202,12 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [liveStreams, setLiveStreams] = useState<LiveStreamConfig[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.LIVE_STREAMS);
-      return saved ? JSON.parse(saved) : INITIAL_LIVE_STREAMS;
+      const streams: LiveStreamConfig[] = saved ? JSON.parse(saved) : INITIAL_LIVE_STREAMS;
+      const loop = INITIAL_LIVE_STREAMS[0];
+      // Activate the requested queue once for existing installations, preserving saved feeds.
+      return streams.some((stream) => stream.id === loop.id)
+        ? streams
+        : [loop, ...streams.map((stream) => ({ ...stream, isActive: false }))];
     } catch {
       return INITIAL_LIVE_STREAMS;
     }
@@ -271,16 +276,8 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  const [currentUser, setCurrentUser] = useState<JournalistUser | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-      if (saved) return JSON.parse(saved);
-      // Default to the first pre-approved journalist so user can immediately test
-      return INITIAL_JOURNALISTS[0] || null;
-    } catch {
-      return INITIAL_JOURNALISTS[0] || null;
-    }
-  });
+  // Each page load starts signed out; only a successful login sets the user.
+  const [currentUser, setCurrentUser] = useState<JournalistUser | null>(null);
 
   // Journalist News Submissions State
   const [allNewsSubmissions, setAllNewsSubmissions] = useState<JournalistNewsSubmission[]>(() => {
@@ -462,15 +459,12 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      if (currentUser) {
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-      }
+      // Clear sessions saved by the previous automatic demo login.
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     } catch (e) {
-      console.error('Failed to save current user', e);
+      console.error('Failed to clear legacy session', e);
     }
-  }, [currentUser]);
+  }, []);
 
   // Persist to localStorage
   useEffect(() => {
@@ -749,6 +743,9 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logoutJournalist = () => {
     setCurrentUser(null);
+    setIsProfileModalOpen(false);
+    setIsMyNewsModalOpen(false);
+    setIsUploadNewsModalOpen(false);
   };
 
   const updateJournalistStatus = (
@@ -1008,7 +1005,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAllJournalists(INITIAL_JOURNALISTS);
     setAllNewsSubmissions(INITIAL_JOURNALIST_NEWS);
     setAllRadioVoices(INITIAL_RADIO_VOICES);
-    setCurrentUser(INITIAL_JOURNALISTS[0]);
+    setCurrentUser(null);
     try {
       localStorage.removeItem(STORAGE_KEYS.VIDEOS);
       localStorage.removeItem(STORAGE_KEYS.LIVE_STREAMS);

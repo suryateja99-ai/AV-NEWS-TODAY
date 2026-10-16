@@ -299,7 +299,7 @@ export const AuthModal: React.FC = () => {
               {/* Quick Demo Fill Buttons for Testing */}
               <div className="pt-2 border-t border-blue-900/40">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  Quick Demo Accounts (For Instant Review):
+                  Demo credentials (click an account to fill the form):
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
@@ -308,7 +308,7 @@ export const AuthModal: React.FC = () => {
                     className="p-2.5 rounded-lg bg-[#070e1e] border border-emerald-500/40 hover:bg-emerald-950/30 text-left cursor-pointer transition-colors"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-emerald-400">Ravi Teja Varma</span>
+                      <span className="text-xs font-black text-emerald-400">Demo login: Ravi Teja Varma</span>
                       <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
                         APPROVED
                       </span>
