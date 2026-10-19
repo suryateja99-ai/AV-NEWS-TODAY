@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NewsProvider, useNews } from './context/NewsContext';
 import { Navbar } from './components/Navbar';
 import { HomePage } from './components/HomePage';
@@ -24,7 +24,19 @@ import { RadioPage } from './components/RadioPage';
 import { RecordVoiceModal } from './components/RecordVoiceModal';
 
 const AppContent: React.FC = () => {
-  const { activeCategory } = useNews();
+  const { activeCategory, setActiveCategory, isAdminOpen, setIsAdminOpen } = useNews();
+  useEffect(() => {
+    const onNavigate = () => {
+      setIsAdminOpen(window.location.pathname === '/admin');
+      setActiveCategory(window.location.pathname === '/radio' ? 'radio' : 'home');
+    };
+    window.addEventListener('popstate', onNavigate);
+    return () => window.removeEventListener('popstate', onNavigate);
+  }, []);
+  useEffect(() => {
+    const target = isAdminOpen ? '/admin' : activeCategory === 'radio' ? '/radio' : '/';
+    if (window.location.pathname !== target) window.history.pushState({}, '', target);
+  }, [activeCategory, isAdminOpen]);
 
   return (
     <div className="min-h-screen bg-[#060b18] text-slate-100 flex flex-col font-sans selection:bg-red-600 selection:text-white">

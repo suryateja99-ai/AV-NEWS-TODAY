@@ -20,3 +20,13 @@ export function getVideoFramingStyle(value?: BroadcastSettings['videoFraming']) 
     transformOrigin: `${framing.focusX}% ${framing.focusY}%`,
   };
 }
+
+export function getViewportStyle(settings: BroadcastSettings) {
+  const framing = getVideoFraming(settings.videoFraming);
+  const viewport = settings.viewport;
+  const scale = Math.max(0.8, Math.min(1.2, viewport?.scale ?? 1));
+  return {
+    transform: `translate(${viewport?.panX ?? 0}%, ${viewport?.panY ?? 0}%) scale(${framing.zoomX * scale}, ${framing.zoomY * scale})`,
+    transformOrigin: `${framing.focusX}% ${framing.focusY}%`,
+  };
+}

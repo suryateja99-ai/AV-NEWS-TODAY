@@ -1,6 +1,10 @@
+import { applyFallbackPreset, ensureFallbackStream } from '../utils/broadcast';
+import { deleteStoredMedia } from '../utils/mediaStore';
+import { getScheduleState, validateProgram, resolveScheduledStream } from '../utils/schedule';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   INITIAL_BROADCAST_SETTINGS,
+  DEFAULT_FALLBACK_STREAM,
   INITIAL_CHAT_MESSAGES,
   INITIAL_JOURNALIST_NEWS,
   INITIAL_JOURNALISTS,
@@ -12,6 +16,7 @@ import {
 } from '../data/initialData';
 import {
   BroadcastSettings,
+  BroadcastProgram,
   ChatMessage,
   JournalistNewsSubmission,
   JournalistUser,
@@ -30,6 +35,10 @@ interface NewsContextType {
   deleteVideo: (id: string) => void;
 
   // Live Streams
+  programs: BroadcastProgram[];
+  scheduleState: ReturnType<typeof getScheduleState>;
+  saveProgram: (program: BroadcastProgram) => string | null;
+  deleteProgram: (id: string) => void;
   liveStreams: LiveStreamConfig[];
   activeLiveStream: LiveStreamConfig;
   setActiveLiveStream: (id: string) => void;
@@ -158,6 +167,8 @@ interface NewsContextType {
   deleteRadioVoice: (id: string) => void;
   updateRadioVoiceTitle: (id: string, newTitle: string, newTitleTelugu?: string) => void;
 
+  setIsVoiceAudioPlaying: (playing: boolean) => void;
+
   // Slow Background Music for AV Radio (default low volume)
   isBackgroundMusicEnabled: boolean;
   setIsBackgroundMusicEnabled: (enabled: boolean) => void;
@@ -176,6 +187,7 @@ const STORAGE_KEYS = {
   VIDEOS: 'av_news_videos_v1',
   LIVE_STREAMS: 'av_news_live_streams_v1',
   SETTINGS: 'av_news_settings_v1',
+  PROGRAMS: 'av_news_programs_v1',
   TICKERS: 'av_news_tickers_v1',
   POLL: 'av_news_poll_v1',
   CHAT: 'av_news_chat_v1',
@@ -205,9 +217,10 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const streams: LiveStreamConfig[] = saved ? JSON.parse(saved) : INITIAL_LIVE_STREAMS;
       const loop = INITIAL_LIVE_STREAMS[0];
       // Activate the requested queue once for existing installations, preserving saved feeds.
-      return streams.some((stream) => stream.id === loop.id)
+      const withLoop = streams.some((stream) => stream.id === loop.id)
         ? streams
         : [loop, ...streams.map((stream) => ({ ...stream, isActive: false }))];
+      return ensureFallbackStream(withLoop, DEFAULT_FALLBACK_STREAM);
     } catch {
       return INITIAL_LIVE_STREAMS;
     }
@@ -217,11 +230,34 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [broadcastSettings, setBroadcastSettings] = useState<BroadcastSettings>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      return saved ? JSON.parse(saved) : INITIAL_BROADCAST_SETTINGS;
+      if (!saved) return INITIAL_BROADCAST_SETTINGS;
+      const settings = JSON.parse(saved);
+      return applyFallbackPreset({ ...INITIAL_BROADCAST_SETTINGS, ...settings, fallbackPresetVersion: settings.fallbackPresetVersion }, DEFAULT_FALLBACK_STREAM);
     } catch {
       return INITIAL_BROADCAST_SETTINGS;
     }
   });
+
+  const [programs, setPrograms] = useState<BroadcastProgram[]>(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.PROGRAMS) || '[]'); } catch { return []; }
+  });
+  const [broadcastClock, setBroadcastClock] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setBroadcastClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs)); }
+    catch (error) { console.error('Failed to save broadcast schedule', error); }
+  }, [programs]);
+  const scheduleState = getScheduleState(programs, broadcastClock);
+  const saveProgram = (program: BroadcastProgram) => {
+    const error = validateProgram(program, programs, Date.now());
+    if (error) return error;
+    setPrograms((previous) => [...previous.filter((item) => item.id !== program.id), program]);
+    return null;
+  };
+  const deleteProgram = (id: string) => setPrograms((previous) => previous.filter((program) => program.id !== id));
 
   // 4. Tickers
   const [tickers, setTickers] = useState<string[]>(() => {
@@ -254,13 +290,13 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   // Navigation State
-  const [activeCategory, setActiveCategory] = useState<string>('home');
+  const [activeCategory, setActiveCategory] = useState<string>(() => window.location.pathname === '/radio' ? 'radio' : 'home');
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
 
   // Modals
   const [isLivePlayerOpen, setIsLivePlayerOpen] = useState<boolean>(false);
-  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
+  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(window.location.pathname === '/admin');
   const [isEpaperOpen, setIsEpaperOpen] = useState<boolean>(false);
   const [isEditorialOpen, setIsEditorialOpen] = useState<boolean>(false);
   const [isPhotosOpen, setIsPhotosOpen] = useState<boolean>(false);
@@ -317,39 +353,13 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activePlayingVoice, setActivePlayingVoice] = useState<RadioVoice | null>(null);
   const [isRecordVoiceModalOpen, setIsRecordVoiceModalOpen] = useState<boolean>(false);
   const [isBackgroundMusicEnabled, setIsBackgroundMusicEnabled] = useState<boolean>(true);
+  const [isVoiceAudioPlaying, setIsVoiceAudioPlaying] = useState(false);
   const [backgroundMusicVolume, setBackgroundMusicVolume] = useState<number>(0.15); // default 15% low volume
 
-  const bgMusicAudioRef = useRef<HTMLAudioElement | null>(null);
   const synthAudioCtxRef = useRef<AudioContext | null>(null);
   const synthNodesRef = useRef<any[]>([]);
 
-  // Initialize and manage slow background music for AV Radio
-  useEffect(() => {
-    try {
-      const audio = new Audio(
-        'https://assets.mixkit.co/music/preview/mixkit-relaxing-in-nature-522.mp3'
-      );
-      audio.loop = true;
-      audio.volume = backgroundMusicVolume;
-      bgMusicAudioRef.current = audio;
-    } catch (e) {
-      console.warn('Audio element error', e);
-    }
-
-    return () => {
-      if (bgMusicAudioRef.current) {
-        bgMusicAudioRef.current.pause();
-        bgMusicAudioRef.current = null;
-      }
-      stopSynthAmbient();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (bgMusicAudioRef.current) {
-      bgMusicAudioRef.current.volume = Math.max(0, Math.min(1, backgroundMusicVolume));
-    }
-  }, [backgroundMusicVolume]);
+  useEffect(() => () => stopSynthAmbient(), []);
 
   const playSynthAmbient = () => {
     try {
@@ -410,26 +420,12 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   };
 
-  // Play / pause background music automatically when a voice is played
+  // Generate ambient audio locally; pause immediately when the public voice stops.
   useEffect(() => {
-    if (activePlayingVoice && isBackgroundMusicEnabled) {
-      if (bgMusicAudioRef.current) {
-        bgMusicAudioRef.current.currentTime = 0;
-        bgMusicAudioRef.current
-          .play()
-          .catch(() => {
-            playSynthAmbient();
-          });
-      } else {
-        playSynthAmbient();
-      }
-    } else {
-      if (bgMusicAudioRef.current) {
-        bgMusicAudioRef.current.pause();
-      }
-      stopSynthAmbient();
-    }
-  }, [activePlayingVoice, isBackgroundMusicEnabled]);
+    if (activePlayingVoice && isVoiceAudioPlaying && isBackgroundMusicEnabled && backgroundMusicVolume > 0) playSynthAmbient();
+    else stopSynthAmbient();
+    return () => stopSynthAmbient();
+  }, [activePlayingVoice?.id, isVoiceAudioPlaying, isBackgroundMusicEnabled, backgroundMusicVolume]);
 
   // Persist radio voices to localStorage
   useEffect(() => {
@@ -515,9 +511,32 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [chatMessages]);
 
-  // Derived active stream
-  const activeLiveStream =
-    liveStreams.find((s) => s.isActive) || liveStreams[0] || INITIAL_LIVE_STREAMS[0];
+  // Keep control-room and viewer tabs on this origin in sync without sharing login state.
+  useEffect(() => {
+    const receive = (event: StorageEvent) => {
+      if (!event.newValue) return;
+      try {
+        const value = JSON.parse(event.newValue);
+        if (event.key === STORAGE_KEYS.SETTINGS && value && typeof value === 'object') setBroadcastSettings({ ...INITIAL_BROADCAST_SETTINGS, ...value });
+        if (event.key === STORAGE_KEYS.PROGRAMS && Array.isArray(value)) setPrograms(value);
+        if (event.key === STORAGE_KEYS.LIVE_STREAMS && Array.isArray(value)) setLiveStreams(value);
+        if (event.key === STORAGE_KEYS.RADIO_VOICES && Array.isArray(value)) setAllRadioVoices(value);
+        if (event.key === STORAGE_KEYS.SUBMISSIONS && Array.isArray(value)) setAllNewsSubmissions(value);
+        if (event.key === STORAGE_KEYS.JOURNALISTS && Array.isArray(value)) setAllJournalists(value);
+        if (event.key === STORAGE_KEYS.VIDEOS && Array.isArray(value)) setVideos(value);
+        if (event.key === STORAGE_KEYS.TICKERS && Array.isArray(value)) setTickers(value);
+      } catch (error) { console.error('Invalid broadcast update', error); }
+    };
+    window.addEventListener('storage', receive);
+    return () => window.removeEventListener('storage', receive);
+  }, []);
+  useEffect(() => {
+    if (activePlayingVoice && !allRadioVoices.some((voice) => voice.id === activePlayingVoice.id && voice.status === 'approved')) setActivePlayingVoice(null);
+  }, [allRadioVoices]);
+
+  // Scheduler resolves its source without changing the saved manual selection.
+  const currentProgram = broadcastSettings.schedulerEnabled ? scheduleState.current : undefined;
+  const activeLiveStream = resolveScheduledStream(liveStreams, broadcastSettings, currentProgram) || INITIAL_LIVE_STREAMS[0];
 
   // Actions
   const addVideo = (videoData: Omit<VideoItem, 'id' | 'views' | 'uploadedAt'>) => {
@@ -539,6 +558,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setActiveLiveStream = (id: string) => {
+    setBroadcastSettings((previous) => ({ ...previous, schedulerEnabled: false }));
     setLiveStreams((prev) =>
       prev.map((s) => ({
         ...s,
@@ -558,6 +578,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     // if active, deactivate others
     if (newStream.isActive) {
+      setBroadcastSettings((previous) => ({ ...previous, schedulerEnabled: false }));
       setLiveStreams((prev) => [...prev.map((s) => ({ ...s, isActive: false })), newStream]);
     } else {
       setLiveStreams((prev) => [...prev, newStream]);
@@ -565,6 +586,8 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteLiveStream = (id: string) => {
+    const stream = liveStreams.find((item) => item.id === id);
+    if (stream) deleteStoredMedia(stream.streamUrl).catch(console.error);
     setLiveStreams((prev) => {
       const filtered = prev.filter((s) => s.id !== id);
       if (filtered.length > 0 && !filtered.some((s) => s.isActive)) {
@@ -575,6 +598,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const startLiveCameraBroadcast = (stream: MediaStream) => {
+    setBroadcastSettings((previous) => ({ ...previous, schedulerEnabled: false }));
     setActiveLiveCameraStream(stream);
     setIsCameraBroadcasting(true);
 
@@ -844,6 +868,13 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     const sub = allNewsSubmissions.find((s) => s.id === submissionId);
+    if (sub && sub.status !== 'approved' && sub.tags.some((tag) => tag.toLowerCase().includes('breaking'))) {
+      addTicker(sub.titleTelugu || sub.title);
+      setBroadcastSettings((previous) => ({ ...previous,
+        teluguTickerItems: [...(previous.teluguTickerItems || []), sub.titleTelugu || sub.title],
+        englishTickerItems: [...(previous.englishTickerItems || []), sub.title],
+      }));
+    }
     if (sub) {
       const newVideo: VideoItem = {
         id: `v-journ-${sub.id}`,
@@ -958,6 +989,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const rejectRadioVoice = (id: string, reason?: string) => {
+    if (activePlayingVoice?.id === id) setActivePlayingVoice(null);
     const reviewedAt = new Date().toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -975,6 +1007,8 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteRadioVoice = (id: string) => {
+    const voice = allRadioVoices.find((item) => item.id === id);
+    if (voice) deleteStoredMedia(voice.audioUrl).catch(console.error);
     setAllRadioVoices((prev) => prev.filter((v) => v.id !== id));
     if (activePlayingVoice?.id === id) {
       setActivePlayingVoice(null);
@@ -996,6 +1030,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetToInitialData = () => {
+    setPrograms([]);
     setVideos(INITIAL_VIDEOS);
     setLiveStreams(INITIAL_LIVE_STREAMS);
     setBroadcastSettings(INITIAL_BROADCAST_SETTINGS);
@@ -1010,6 +1045,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem(STORAGE_KEYS.VIDEOS);
       localStorage.removeItem(STORAGE_KEYS.LIVE_STREAMS);
       localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+      localStorage.removeItem(STORAGE_KEYS.PROGRAMS);
       localStorage.removeItem(STORAGE_KEYS.TICKERS);
       localStorage.removeItem(STORAGE_KEYS.POLL);
       localStorage.removeItem(STORAGE_KEYS.CHAT);
@@ -1029,6 +1065,10 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVideo,
         updateVideo,
         deleteVideo,
+        programs,
+        scheduleState,
+        saveProgram,
+        deleteProgram,
         liveStreams,
         activeLiveStream,
         setActiveLiveStream,
@@ -1102,6 +1142,7 @@ export const NewsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         rejectRadioVoice,
         deleteRadioVoice,
         updateRadioVoiceTitle,
+        setIsVoiceAudioPlaying,
         isBackgroundMusicEnabled,
         setIsBackgroundMusicEnabled,
         backgroundMusicVolume,

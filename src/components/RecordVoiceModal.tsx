@@ -1,3 +1,4 @@
+import { storeMedia } from '../utils/mediaStore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -196,7 +197,7 @@ export const RecordVoiceModal: React.FC = () => {
   };
 
   // Handle Submit Voice
-  const handleUploadSubmit = (e: React.FormEvent) => {
+  const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setFeedbackMsg({
@@ -215,10 +216,18 @@ export const RecordVoiceModal: React.FC = () => {
 
     const durationStr = formatTime(recordingSeconds || 60);
 
+    let storedAudio: string;
+    try {
+      const blob = recordedBlob || await fetch(recordedAudioUrl).then((response) => response.blob());
+      storedAudio = await storeMedia(blob);
+    } catch {
+      setFeedbackMsg({ type: 'error', text: 'Could not save the recording. Check browser storage space and try again.' });
+      return;
+    }
     const result = submitRadioVoice({
       title: title.trim(),
       titleTelugu: titleTelugu.trim() || title.trim(),
-      audioUrl: recordedAudioUrl,
+      audioUrl: storedAudio,
       duration: durationStr,
       durationSeconds: recordingSeconds,
       userName: userName.trim() || 'Anonymous Citizen / పౌరుడు',

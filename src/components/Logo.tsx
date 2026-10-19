@@ -7,6 +7,7 @@ interface LogoProps {
   alt?: string;
   showRing?: boolean;
   showGlow?: boolean;
+  transparent?: boolean;
 }
 
 export const Logo: React.FC<LogoProps> = ({
@@ -15,6 +16,7 @@ export const Logo: React.FC<LogoProps> = ({
   alt = 'AV News Today Logo',
   showRing = true,
   showGlow = false,
+  transparent = false,
 }) => {
   const { broadcastSettings } = useNews();
 
@@ -51,7 +53,7 @@ export const Logo: React.FC<LogoProps> = ({
           target.src = '/logo.jpg';
         }
       }}
-      className={`rounded-md object-contain bg-white shrink-0 ${sizeClasses[size]} ${ringClasses} ${glowClasses} ${className}`}
+      className={`rounded-md object-contain ${transparent ? 'bg-transparent' : 'bg-white'} shrink-0 ${sizeClasses[size]} ${ringClasses} ${glowClasses} ${className}`}
     />
   );
 };

@@ -1,3 +1,7 @@
+import { RadioModerationSettings } from './RadioModerationSettings';
+import { BroadcastScheduler } from './BroadcastScheduler';
+import { BroadcastControlSettings } from './BroadcastControlSettings';
+import { resolveMedia, storeMedia } from '../utils/mediaStore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -36,7 +40,7 @@ import {
 } from 'lucide-react';
 import { useNews } from '../context/NewsContext';
 import { Logo } from './Logo';
-import { normalizeBroadcastUrl } from '../utils/broadcast';
+import { normalizeBroadcastUrl, normalizeYuppTVSource } from '../utils/broadcast';
 import { BroadcastFramingControls } from './BroadcastFramingControls';
 import {
   JournalistNewsSubmission,
@@ -89,6 +93,9 @@ export const AdminPortal: React.FC = () => {
     | 'live-studio'
     | 'registrations'
     | 'news-verification'
+    | 'journalists'
+    | 'scheduler'
+    | 'screen-zoom'
     | 'av-radio'
     | 'overlays'
     | 'l-shape-ads'
@@ -133,6 +140,8 @@ export const AdminPortal: React.FC = () => {
   const [streamChannel, setStreamChannel] = useState(activeLiveStream.channelName);
   const [streamUrl, setStreamUrl] = useState(activeLiveStream.streamUrl);
   const [streamError, setStreamError] = useState('');
+  const [sourceProvider, setSourceProvider] = useState<'auto' | 'yupptv'>(activeLiveStream.provider || 'auto');
+  const [channelCode, setChannelCode] = useState(activeLiveStream.channelCode || '');
   const [streamViewers, setStreamViewers] = useState(activeLiveStream.viewerCount);
   const [streamQuality, setStreamQuality] = useState(activeLiveStream.quality);
 
@@ -162,6 +171,16 @@ export const AdminPortal: React.FC = () => {
   );
   const [sideAdTitle, setSideAdTitle] = useState(broadcastSettings.lShapeSideAd.title);
   const [sideAdSubtitle, setSideAdSubtitle] = useState(broadcastSettings.lShapeSideAd.subtitle);
+
+  useEffect(() => {
+    setAdsEnabled(broadcastSettings.lShapeAdsEnabled);
+  }, [broadcastSettings.lShapeAdsEnabled]);
+  useEffect(() => {
+    setTopTicker(broadcastSettings.topTickerText);
+    setBottomTicker(broadcastSettings.bottomTickerText);
+    setShowLogo(broadcastSettings.isChannelLogoVisible);
+    setShowLiveBadge(broadcastSettings.isLiveBadgeVisible);
+  }, [broadcastSettings.topTickerText, broadcastSettings.bottomTickerText, broadcastSettings.isChannelLogoVisible, broadcastSettings.isLiveBadgeVisible]);
 
   // Prestored Video Form
   const [newVideoTitle, setNewVideoTitle] = useState('');
@@ -196,6 +215,14 @@ export const AdminPortal: React.FC = () => {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
+  useEffect(() => {
+    if (!isAdminOpen || activeAdminTab !== 'av-radio') {
+      adminAudioRef.current?.pause();
+      setPlayingVoiceId(null);
+    }
+    return () => { adminAudioRef.current?.pause(); };
+  }, [isAdminOpen, activeAdminTab]);
+
   // WebRTC Start Recording
   const startCameraRecording = async () => {
     try {
@@ -213,11 +240,12 @@ export const AdminPortal: React.FC = () => {
           recordedChunksRef.current.push(e.data);
         }
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
         setRecordedBlobUrl(url);
-        stopLiveCameraBroadcast(url);
+        try { stopLiveCameraBroadcast(await storeMedia(blob)); }
+        catch { stopLiveCameraBroadcast(url); showToast('Recording is available this session, but browser storage could not save it.'); }
       };
 
       mediaRecorderRef.current = recorder;
@@ -246,12 +274,15 @@ export const AdminPortal: React.FC = () => {
     showToast('Recording stopped! Feed transitioned to recorded edition.');
   };
 
-  const handleActivateRecordedLive = () => {
+  const handleActivateRecordedLive = async () => {
     if (!recordedBlobUrl) return;
+    let storedUrl: string;
+    try { storedUrl = await storeMedia(await fetch(recordedBlobUrl).then((response) => response.blob())); }
+    catch { showToast('Could not save this recording to browser storage.'); return; }
     addLiveStream({
       title: `🔴 Anchor Live Broadcast (${new Date().toLocaleTimeString()})`,
       channelName: 'AV LIVE ANCHOR',
-      streamUrl: recordedBlobUrl,
+      streamUrl: storedUrl,
       streamType: 'mp4',
       isActive: true,
       viewerCount: 52400,
@@ -273,12 +304,15 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
-  const handleActivateUploadedFile = () => {
+  const handleActivateUploadedFile = async () => {
     if (!localVideoPreviewUrl || !localVideoFile) return;
+    let storedUrl: string;
+    try { storedUrl = await storeMedia(localVideoFile); }
+    catch { showToast('Could not save this video. Check browser storage space.'); return; }
     addLiveStream({
       title: `🔴 Local Feed: ${localVideoFile.name.replace(/\.[^/.]+$/, '')}`,
       channelName: 'AV LOCAL FEED',
-      streamUrl: localVideoPreviewUrl,
+      streamUrl: storedUrl,
       streamType: 'mp4',
       isActive: true,
       viewerCount: 46800,
@@ -293,9 +327,9 @@ export const AdminPortal: React.FC = () => {
   const handleSaveUrlStream = (e: React.FormEvent) => {
     e.preventDefault();
     setStreamError('');
-    let source: ReturnType<typeof normalizeBroadcastUrl>;
+    let source: ReturnType<typeof normalizeBroadcastUrl> | ReturnType<typeof normalizeYuppTVSource>;
     try {
-      source = normalizeBroadcastUrl(streamUrl);
+      source = sourceProvider === 'yupptv' ? normalizeYuppTVSource(streamUrl, channelCode) : normalizeBroadcastUrl(streamUrl);
     } catch (error) {
       setStreamError(error instanceof Error ? error.message : 'Invalid video URL.');
       return;
@@ -402,18 +436,18 @@ export const AdminPortal: React.FC = () => {
       <div className="bg-[#0b1428] border border-blue-800/80 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="bg-[#070e1e] border-b border-blue-900/60 p-4 sm:px-6 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Logo size="sm" showRing={false} />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <span className="text-xs font-black text-red-500 uppercase tracking-wider">
                   AV News Today
                 </span>
-                <span className="text-[10px] bg-blue-950 text-blue-300 font-bold px-2 py-0.5 rounded border border-blue-800">
+                <span className="hidden sm:inline text-[10px] bg-blue-950 text-blue-300 font-bold px-2 py-0.5 rounded border border-blue-800">
                   ADMIN CONTROL STUDIO
                 </span>
               </div>
-              <h2 className="text-base sm:text-lg font-black text-white">
+              <h2 className="text-xs sm:text-lg font-black text-white">
                 Live Broadcast & Content Control Studio
               </h2>
             </div>
@@ -434,6 +468,7 @@ export const AdminPortal: React.FC = () => {
             </button>
 
             <button
+              aria-label="Close Admin"
               onClick={() => setIsAdminOpen(false)}
               className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
             >
@@ -451,7 +486,7 @@ export const AdminPortal: React.FC = () => {
         )}
 
         {/* Navigation Tabs */}
-        <div className="grid grid-cols-1 min-[440px]:grid-cols-2 lg:grid-cols-3 gap-1 p-2.5 bg-[#081022] border-b border-blue-900/40 text-xs shrink-0 max-h-[32vh] overflow-y-auto" role="tablist" aria-label="Admin sections">
+        <div className="grid grid-cols-1 min-[440px]:grid-cols-2 lg:grid-cols-3 gap-1 p-2.5 bg-[#081022] border-b border-blue-900/40 text-xs shrink-0 max-h-[28vh] overflow-y-auto" role="tablist" aria-label="Admin sections">
           {[
             { id: 'live-studio', label: '🔴 LIVE BROADCAST STUDIO', icon: Radio },
             {
@@ -481,6 +516,9 @@ export const AdminPortal: React.FC = () => {
               }`,
               icon: Mic,
             },
+            { id: 'journalists', label: 'EDITORIAL & JOURNALIST PRESS DESK', icon: FileCheck },
+            { id: 'scheduler', label: '48-HOUR SCHEDULER', icon: Radio },
+            { id: 'screen-zoom', label: 'SCREEN ZOOM & VIEWPORT', icon: Layers },
             { id: 'overlays', label: '🎨 DUAL TICKERS & LOGO', icon: Layers },
             { id: 'l-shape-ads', label: '📺 L-SHAPE (L-BAND) ADS', icon: Tv },
             { id: 'upload-video', label: '📹 UPLOAD PRESTORED VIDEO', icon: Upload },
@@ -513,6 +551,15 @@ export const AdminPortal: React.FC = () => {
           {/* ========================================================= */}
           {/* TAB 1: LIVE BROADCAST STUDIO */}
           {/* ========================================================= */}
+          {activeAdminTab === 'journalists' && <section className="space-y-4">
+            <h3 className="font-bold">Editorial & journalist press desk</h3>
+            <p className="text-xs text-slate-400">Review credentials before granting journalist access. Approve reports for the public feed; reports tagged ?breaking? also enter both live tickers.</p>
+            <div className="flex flex-wrap gap-3"><button className="rounded-lg bg-blue-600 px-4 py-3 text-xs font-bold" onClick={() => setActiveAdminTab('registrations')}>Review journalist applications ({allJournalists.filter((user) => user.status === 'pending').length})</button><button className="rounded-lg bg-blue-600 px-4 py-3 text-xs font-bold" onClick={() => setActiveAdminTab('news-verification')}>Review field reports ({allNewsSubmissions.filter((report) => report.status === 'pending').length})</button></div>
+          </section>}
+          {activeAdminTab === 'scheduler' && <BroadcastScheduler />}
+          {activeAdminTab === 'screen-zoom' && <BroadcastControlSettings section="viewport" />}
+          {activeAdminTab === 'overlays' && <BroadcastControlSettings section="overlays" />}
+          {activeAdminTab === 'l-shape-ads' && <BroadcastControlSettings section="ads" />}
           {activeAdminTab === 'live-studio' && (
             <div className="space-y-6">
               <BroadcastFramingControls />
@@ -570,6 +617,10 @@ export const AdminPortal: React.FC = () => {
                     </span>
                   </div>
 
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="text-xs">Source provider<select className="w-full bg-slate-950 border border-blue-900 rounded-lg p-2 mt-1" value={sourceProvider} onChange={(event) => setSourceProvider(event.target.value as 'auto' | 'yupptv')}><option value="auto">YouTube ID / URL, HLS, or MP4</option><option value="yupptv">YuppTV authorized feed</option></select></label>
+                    {sourceProvider === 'yupptv' && <label className="text-xs">YuppTV channel code<input className="w-full bg-slate-950 border border-blue-900 rounded-lg p-2 mt-1" value={channelCode} onChange={(event) => setChannelCode(event.target.value)} /><span className="text-slate-400">A channel code also needs its authorized playback or embed URL below.</span></label>}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">
@@ -1854,11 +1905,13 @@ export const AdminPortal: React.FC = () => {
           {/* ========================================================= */}
           {activeAdminTab === 'av-radio' && (
             <div className="space-y-5">
-              {/* Hidden Master Audio Element for Admin Playback */}
+              <RadioModerationSettings />
+              {/* Audio preview with scrubbing */}
               <audio
                 ref={adminAudioRef}
                 onEnded={() => setPlayingVoiceId(null)}
-                className="hidden"
+                controls
+                className="w-full h-10"
               />
 
               {/* Stats Overview */}
@@ -1962,6 +2015,7 @@ export const AdminPortal: React.FC = () => {
                     return (
                       <div
                         key={voice.id}
+                        data-voice-id={voice.id}
                         className={`bg-[#081126] border rounded-xl p-4 transition-all space-y-3 shadow-md ${
                           isVoicePlaying
                             ? 'border-amber-400 bg-[#0c1836]'
@@ -2037,6 +2091,13 @@ export const AdminPortal: React.FC = () => {
                               </button>
                             </div>
 
+                            {editingVoice?.id === voice.id && <form className="space-y-2 mt-2" onSubmit={(event) => {
+                              event.preventDefault(); updateRadioVoiceTitle(voice.id, editTitleInput.trim(), editTitleTeluguInput.trim()); setEditingVoice(null); showToast('Voice title updated.');
+                            }}>
+                              <label className="block text-xs">English title<input required aria-label="Voice English title" value={editTitleInput} onChange={(event) => setEditTitleInput(event.target.value)} className="block w-full rounded bg-slate-950 border border-blue-800 p-2 mt-1" /></label>
+                              <label className="block text-xs">Telugu title<input aria-label="Voice Telugu title" value={editTitleTeluguInput} onChange={(event) => setEditTitleTeluguInput(event.target.value)} className="block w-full rounded bg-slate-950 border border-blue-800 p-2 mt-1" /></label>
+                              <div className="flex gap-3 text-xs"><button className="rounded bg-blue-600 px-3 py-1.5">Save title</button><button type="button" onClick={() => setEditingVoice(null)}>Cancel</button></div>
+                            </form>}
                             {voice.titleTelugu && voice.titleTelugu !== voice.title && (
                               <p className="text-xs text-slate-400">{voice.title}</p>
                             )}
@@ -2051,14 +2112,19 @@ export const AdminPortal: React.FC = () => {
                           {/* Listen & Review Audio Player */}
                           <div className="flex items-center gap-3 shrink-0">
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 if (isVoicePlaying) {
                                   if (adminAudioRef.current) adminAudioRef.current.pause();
                                   setPlayingVoiceId(null);
                                 } else {
                                   setPlayingVoiceId(voice.id);
                                   if (adminAudioRef.current) {
-                                    adminAudioRef.current.src = voice.audioUrl;
+                                    try {
+                                      const audio = adminAudioRef.current;
+                                      const url = await resolveMedia(voice.audioUrl);
+                                      if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
+                                      audio.src = url;
+                                    } catch { showToast('This recording could not be loaded from browser storage.'); setPlayingVoiceId(null); return; }
                                     adminAudioRef.current.play().catch(() => {});
                                   }
                                 }
@@ -2422,79 +2488,6 @@ export const AdminPortal: React.FC = () => {
       )}
 
       {/* MODAL: CHANGE VOICE TITLE */}
-      {editingVoice && (
-        <div className="fixed inset-0 z-60 bg-black/90 flex items-center justify-center p-4">
-          <div className="bg-[#091226] border border-amber-500 rounded-xl p-5 max-w-md w-full space-y-4 shadow-2xl animate-scaleUp">
-            <div className="flex items-center justify-between border-b border-blue-900/60 pb-2">
-              <h4 className="text-sm font-black text-white flex items-center gap-1.5">
-                <Edit3 className="w-4 h-4 text-amber-400" />
-                <span>CHANGE VOICE TITLE (శీర్షికను మార్చండి)</span>
-              </h4>
-              <button
-                onClick={() => setEditingVoice(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Title (శీర్షిక - తెలుగు / ఇంగ్లీష్)
-                </label>
-                <input
-                  type="text"
-                  value={editTitleTeluguInput}
-                  onChange={(e) => setEditTitleTeluguInput(e.target.value)}
-                  className="w-full bg-[#060c1d] border border-blue-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-                  placeholder="వాయిస్ శీర్షిక..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Title (English Translation / Alt)
-                </label>
-                <input
-                  type="text"
-                  value={editTitleInput}
-                  onChange={(e) => setEditTitleInput(e.target.value)}
-                  className="w-full bg-[#060c1d] border border-blue-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-                  placeholder="Voice title in English..."
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 justify-end pt-2 border-t border-blue-900/40">
-              <button
-                onClick={() => setEditingVoice(null)}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 rounded-lg cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (editTitleTeluguInput.trim() || editTitleInput.trim()) {
-                    updateRadioVoiceTitle(
-                      editingVoice.id,
-                      editTitleInput.trim() || editTitleTeluguInput.trim(),
-                      editTitleTeluguInput.trim() || editTitleInput.trim()
-                    );
-                    showToast('Voice title updated successfully!');
-                    setEditingVoice(null);
-                  }
-                }}
-                className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-black rounded-lg shadow cursor-pointer"
-              >
-                Save Title
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: REJECT VOICE */}
       {rejectingVoiceId && (
         <div className="fixed inset-0 z-60 bg-black/90 flex items-center justify-center p-4">
           <div className="bg-[#091226] border border-red-500 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-2xl">

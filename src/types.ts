@@ -33,7 +33,27 @@ export interface VideoItem {
   isExplainer?: boolean;
 }
 
-export type StreamType = 'youtube' | 'hls' | 'mp4' | 'webrtc';
+export type StreamType = 'youtube' | 'hls' | 'mp4' | 'webrtc' | 'embed';
+
+export interface BroadcastProgram {
+  id: string;
+  title: string;
+  anchor: string;
+  category: string;
+  startAt: string;
+  durationMinutes: 30 | 60;
+  streamId: string;
+  fallbackStreamId?: string;
+}
+
+export interface SponsorCreative {
+  id: string;
+  title: string;
+  sideImage: string;
+  bottomImage: string;
+  targetUrl: string;
+  phone: string;
+}
 
 export interface LiveStreamConfig {
   id: string;
@@ -47,9 +67,28 @@ export interface LiveStreamConfig {
   quality: string;
   category: string;
   description?: string;
+  provider?: 'yupptv';
+  channelCode?: string;
 }
 
 export interface BroadcastSettings {
+  fallbackPresetVersion?: number;
+  schedulerEnabled?: boolean;
+  fallbackStreamId?: string;
+  breakingFlashEnabled?: boolean;
+  breakingFlashText?: string;
+  teluguTickerItems?: string[];
+  englishTickerItems?: string[];
+  tickerSpeed?: number;
+  tickerOpacity?: number;
+  watermarkPosition?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  watermarkScale?: number;
+  viewport?: { scale: number; panX: number; panY: number; fit: 'contain' | 'cover' | 'fill' };
+  adSideWidth?: number;
+  adBottomHeight?: number;
+  adRotationSeconds?: number;
+  adCreatives?: SponsorCreative[];
+  foundationLogoUrl?: string;
   videoFraming?: {
     zoomX: number;
     zoomY: number;
@@ -67,12 +106,16 @@ export interface BroadcastSettings {
     title: string;
     subtitle: string;
     bannerUrl?: string;
+    targetUrl?: string;
+    phone?: string;
   };
   lShapeSideAd: {
     tag: string;
     title: string;
     subtitle: string;
     bannerUrl?: string;
+    targetUrl?: string;
+    phone?: string;
   };
   radioStreamUrl: string;
   radioTitle: string;

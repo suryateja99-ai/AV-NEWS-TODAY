@@ -22,7 +22,23 @@ export const INITIAL_TICKERS: string[] = [
   'రైతులకు 24 గంటల ఉచిత విద్యుత్ సరఫరాపై ప్రభుత్వం స్పష్టత',
 ];
 
+export const DEFAULT_FALLBACK_STREAM: LiveStreamConfig = {
+  id: 'stream-avnews-fallback-ksHd7AEHWss',
+  title: 'AV News Today — Fallback Broadcast',
+  channelName: 'AV News Today HD',
+  streamUrl: 'https://www.youtube.com/embed/ksHd7AEHWss?autoplay=1&mute=1&playsinline=1',
+  streamType: 'youtube',
+  youtubePlaylist: ['ksHd7AEHWss'],
+  isActive: false,
+  viewerCount: 0,
+  quality: 'HD',
+  category: 'live-news',
+};
+
 export const INITIAL_BROADCAST_SETTINGS: BroadcastSettings = {
+  fallbackPresetVersion: 1,
+  fallbackStreamId: DEFAULT_FALLBACK_STREAM.id,
+  schedulerEnabled: true,
   channelLogoUrl: '/logo.jpg',
   topTickerText:
     '🔴 బ్రేకింగ్: ఏపీ, తెలంగాణలో భారీ వర్షాలు • పలు నదులు, వాగులు పొంగిపొర్లుతున్నాయి • ప్రజలు అప్రమత్తంగా ఉండాలని అధికారుల హెచ్చరిక',
@@ -110,6 +126,7 @@ export const INITIAL_LIVE_STREAMS: LiveStreamConfig[] = [
     category: 'temple',
     description: 'కలియుగ ప్రత్యక్ష దైవం శ్రీనివాసుని పవిత్ర సేవలు, సుప్రభాతం మరియు తిరుమల క్షేత్ర ప్రత్యక్ష దర్శనం.',
   },
+  DEFAULT_FALLBACK_STREAM,
 ];
 
 export const INITIAL_VIDEOS: VideoItem[] = [

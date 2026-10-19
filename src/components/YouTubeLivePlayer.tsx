@@ -3,7 +3,7 @@ import { Maximize2, Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from 
 import { LiveStreamConfig } from '../types';
 import { nextQueueIndex } from '../utils/broadcast';
 import { useNews } from '../context/NewsContext';
-import { getVideoFramingStyle } from '../utils/videoFraming';
+import { getViewportStyle } from '../utils/videoFraming';
 
 interface Player {
   playVideo(): void;
@@ -68,10 +68,14 @@ function formatTime(value: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-export const YouTubeLivePlayer: React.FC<{ stream: LiveStreamConfig }> = ({ stream }) => {
+export const YouTubeLivePlayer: React.FC<{ stream: LiveStreamConfig; onUnavailable?: () => void }> = ({ stream, onUnavailable }) => {
   const { broadcastSettings } = useNews();
   const hostRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const unavailableRef = useRef(onUnavailable);
+  unavailableRef.current = onUnavailable;
+  const [frame, setFrame] = useState({ width: 0, height: 0 });
   const playerRef = useRef<Player | null>(null);
   const indexRef = useRef(0);
   const [index, setIndex] = useState(0);
@@ -87,6 +91,17 @@ export const YouTubeLivePlayer: React.FC<{ stream: LiveStreamConfig }> = ({ stre
     ? stream.youtubePlaylist
     : [new URL(stream.streamUrl).pathname.split('/').filter(Boolean).pop()!];
   const playlistKey = ids.join(',');
+
+  useEffect(() => {
+    if (!viewportRef.current) return;
+    const observer = new ResizeObserver(([entry]) => setFrame({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    observer.observe(viewportRef.current);
+    return () => observer.disconnect();
+  }, []);
+  const fit = broadcastSettings.viewport?.fit || 'contain';
+  const factor = fit === 'cover' ? Math.max(frame.width / 16, frame.height / 9) : Math.min(frame.width / 16, frame.height / 9);
+  const mediaWidth = fit === 'fill' ? frame.width : factor * 16;
+  const mediaHeight = fit === 'fill' ? frame.height : factor * 9;
 
   const changeVideo = (step: number) => {
     const player = playerRef.current;
@@ -163,7 +178,7 @@ export const YouTubeLivePlayer: React.FC<{ stream: LiveStreamConfig }> = ({ stre
             indexRef.current = nextQueueIndex(indexRef.current, 1, videoIds.length);
             setIndex(indexRef.current);
             instance?.loadVideoById(videoIds[indexRef.current]);
-          }
+          } else unavailableRef.current?.();
         },
         onAutoplayBlocked: () => { if (!cancelled) setMessage('Press Play to start the broadcast.'); },
       } });
@@ -178,9 +193,9 @@ export const YouTubeLivePlayer: React.FC<{ stream: LiveStreamConfig }> = ({ stre
   }, [stream.id, stream.streamUrl, stream.title, playlistKey, retry]);
 
   return (
-    <div ref={containerRef} className="absolute inset-0 flex flex-col bg-black">
-      <div className="relative flex-1 min-h-[200px] overflow-hidden">
-        <div ref={hostRef} className="absolute inset-0" style={getVideoFramingStyle(broadcastSettings.videoFraming)} />
+    <div ref={containerRef} className="relative w-full flex flex-col bg-black">
+      <div ref={viewportRef} className="relative aspect-video min-h-[200px] overflow-hidden">
+        <div ref={hostRef} className="absolute" style={{ ...getViewportStyle(broadcastSettings), width: mediaWidth || '100%', height: mediaHeight || '100%', left: (frame.width - mediaWidth) / 2, top: (frame.height - mediaHeight) / 2 }} />
       </div>
       {message && <div role="status" className="flex items-center justify-between gap-2 bg-slate-900 px-3 py-1 text-xs text-amber-200">
         <span>{message}</span><button type="button" onClick={() => setRetry((value) => value + 1)} className="underline">Retry</button>

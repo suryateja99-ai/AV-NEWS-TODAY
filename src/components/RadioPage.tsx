@@ -1,3 +1,4 @@
+import { resolveMedia } from '../utils/mediaStore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Calendar,
@@ -29,6 +30,7 @@ export const RadioPage: React.FC = () => {
     allRadioVoices,
     activePlayingVoice,
     setActivePlayingVoice,
+    setIsVoiceAudioPlaying,
     setIsRecordVoiceModalOpen,
     isBackgroundMusicEnabled,
     setIsBackgroundMusicEnabled,
@@ -91,24 +93,26 @@ export const RadioPage: React.FC = () => {
     }
   };
 
+  useEffect(() => () => setActivePlayingVoice(null), []);
+
   // Sync activeAudioRef when activePlayingVoice changes
   useEffect(() => {
     if (!activePlayingVoice) {
       setIsPlaying(false);
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-      }
+      activeAudioRef.current?.pause();
       return;
     }
-
-    if (activeAudioRef.current) {
-      activeAudioRef.current.src = activePlayingVoice.audioUrl;
-      activeAudioRef.current.currentTime = 0;
-      activeAudioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    }
+    let cancelled = false;
+    let objectUrl: string | undefined;
+    const audio = activeAudioRef.current;
+    resolveMedia(activePlayingVoice.audioUrl).then((url) => {
+      if (url.startsWith('blob:')) objectUrl = url;
+      if (cancelled || !audio) { if (objectUrl) URL.revokeObjectURL(objectUrl); return; }
+      audio.src = url;
+      audio.currentTime = 0;
+      audio.play().then(() => { if (!cancelled) setIsPlaying(true); }).catch(() => setIsPlaying(false));
+    }).catch(() => setIsPlaying(false));
+    return () => { cancelled = true; audio?.pause(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [activePlayingVoice]);
 
   const toggleLike = (id: string) => {
@@ -127,6 +131,8 @@ export const RadioPage: React.FC = () => {
       {/* Hidden Master Audio Element for Active Voice */}
       <audio
         ref={activeAudioRef}
+        onPlay={() => setIsVoiceAudioPlaying(true)}
+        onPause={() => setIsVoiceAudioPlaying(false)}
         onTimeUpdate={() => {
           if (activeAudioRef.current) {
             setCurrentTime(activeAudioRef.current.currentTime);
