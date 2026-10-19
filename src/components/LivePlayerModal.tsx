@@ -37,6 +37,7 @@ export const LivePlayerModal: React.FC = () => {
     liveStreams,
     setActiveLiveStream,
     broadcastSettings,
+    scheduleState,
     chatMessages,
     addChatMessage,
   } = useNews();
@@ -50,6 +51,12 @@ export const LivePlayerModal: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isStudioCameraActive = activeLiveStream.streamType === 'webrtc';
+  const scheduleLocked = !!broadcastSettings.schedulerEnabled && (!!scheduleState.current || scheduleState.upcoming.length > 0);
+  const airTitle = scheduleLocked && scheduleState.current ? scheduleState.current.title : activeLiveStream.title;
+  const chooseChannel = (id: string) => {
+    if (scheduleLocked) return;
+    setActiveLiveStream(id);
+  };
 
   // Auto-scroll chat
   useEffect(() => {
@@ -106,8 +113,9 @@ export const LivePlayerModal: React.FC = () => {
               <span>LIVE</span>
             </span>
             <span className="hidden sm:inline-block text-xs font-bold text-white truncate max-w-md">
-              {activeLiveStream.title}
+              {airTitle}
             </span>
+            {scheduleLocked && <span className="hidden lg:inline text-[10px] font-bold text-amber-300">{scheduleState.current ? 'ON SCHEDULE' : 'SCHEDULE GAP'}</span>}
             {isStudioCameraActive && (
               <span className="bg-red-500/20 text-red-300 border border-red-500/50 text-[10px] font-bold px-2.5 py-0.5 rounded-full animate-pulse flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
@@ -124,7 +132,8 @@ export const LivePlayerModal: React.FC = () => {
             return (
               <button
                 key={stream.id}
-                onClick={() => setActiveLiveStream(stream.id)}
+                onClick={() => chooseChannel(stream.id)}
+                title={scheduleLocked ? 'The admin schedule is playing on this screen' : stream.channelName}
                 className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
                   isCur
                     ? 'bg-blue-600 text-white border-blue-400 shadow-md'
@@ -331,12 +340,14 @@ export const LivePlayerModal: React.FC = () => {
                 <div className="text-[11px] font-bold text-slate-300">
                   లభ్యమైన ప్రత్యక్ష ఛానెల్స్ (Live Feeds):
                 </div>
+                {scheduleLocked && <p className="text-[11px] text-amber-300">The admin schedule is running on this screen. Turn off automation in Admin to choose a channel by hand.</p>}
                 {liveStreams.map((stream) => {
                   const isCur = stream.id === activeLiveStream.id;
                   return (
                     <div
                       key={stream.id}
-                      onClick={() => setActiveLiveStream(stream.id)}
+                      onClick={() => chooseChannel(stream.id)}
+                      title={scheduleLocked ? 'The admin schedule is playing on this screen' : stream.title}
                       className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
                         isCur
                           ? 'bg-blue-900/70 border-blue-400 shadow-lg'

@@ -5,10 +5,27 @@ import { YouTubeLivePlayer } from './YouTubeLivePlayer';
 import { PlayerBranding } from './PlayerBranding';
 import { getVideoFramingStyle, getViewportStyle } from '../utils/videoFraming';
 import { formatBroadcastTime } from '../utils/schedule';
+import { resolveLAdSlot, visibleHorizontalScrolls } from '../utils/liveGraphics';
 import { resolveMedia } from '../utils/mediaStore';
 
 export function safeLink(value?: string) {
   try { const url = new URL(value || ''); return ['https:', 'http:'].includes(url.protocol) ? url.href : undefined; } catch { return undefined; }
+}
+
+function useResolvedMedia(source?: string) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    if (!source) { setUrl(''); return; }
+    let cancelled = false;
+    let revoke = '';
+    resolveMedia(source).then((resolved) => {
+      if (cancelled) { if (resolved.startsWith('blob:')) URL.revokeObjectURL(resolved); return; }
+      if (resolved.startsWith('blob:')) revoke = resolved;
+      setUrl(resolved);
+    }).catch(() => { if (!cancelled) setUrl(''); });
+    return () => { cancelled = true; if (revoke) URL.revokeObjectURL(revoke); };
+  }, [source]);
+  return url;
 }
 
 export const BroadcastCanvas: React.FC<{ suspended?: boolean }> = ({ suspended = false }) => {
@@ -60,22 +77,22 @@ export const BroadcastCanvas: React.FC<{ suspended?: boolean }> = ({ suspended =
   }, [stream.id, stream.streamUrl, stream.streamType, suspended, activeLiveCameraStream, fallbackId, scheduleState.current?.fallbackStreamId, settings.fallbackStreamId]);
 
   const creatives = settings.adCreatives || [];
-  const creative = creatives[Math.floor(time / ((settings.adRotationSeconds || 30) * 1000)) % (creatives.length || 1)];
+  const slot = creatives.length ? resolveLAdSlot(creatives, time, settings.adRotationSeconds || 30) : { creative: null, visible: true };
+  const creative = slot.creative;
   const adSide = settings.lShapeSideAd;
   const adBottom = settings.lShapeBottomAd;
-  const sideImage = creative?.sideImage || adSide.bannerUrl;
-  const bottomImage = creative?.bottomImage || adBottom.bannerUrl;
+  const sideImage = useResolvedMedia(creative?.sideImage || adSide.bannerUrl);
+  const bottomImage = useResolvedMedia(creative?.bottomImage || adBottom.bannerUrl);
   const sponsorTitle = creative?.title || adSide.title;
   const phone = creative?.phone || adSide.phone;
-  const ads = settings.lShapeAdsEnabled;
+  const ads = settings.lShapeAdsEnabled && slot.visible;
   const viewport = settings.viewport || { scale: 1, panX: 0, panY: 0, fit: 'contain' };
   const tickerStyle = { animationDuration: `${settings.tickerSpeed || 30}s` };
-  const telugu = settings.teluguTickerItems?.filter(Boolean).join(' • ') || settings.topTickerText;
-  const english = settings.englishTickerItems?.filter(Boolean).join(' • ') || settings.bottomTickerText;
+  const scrolls = visibleHorizontalScrolls(settings);
   const clock = new Date(time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const adClick = safeLink(creative?.targetUrl || adSide.targetUrl);
 
-  return <div className="w-full bg-black flex flex-col" data-broadcast-stream={stream.id} data-broadcast-program={settings.schedulerEnabled ? scheduleState.current?.id : undefined}>
+  return <div className="w-full bg-black flex flex-col" data-broadcast-stream={stream.id} data-broadcast-program={settings.schedulerEnabled ? scheduleState.current?.id : undefined} data-l-ad={ads ? (creative?.id || 'default') : undefined}>
     {settings.breakingFlashEnabled && settings.breakingFlashText && <div role="status" className="bg-red-700 px-3 py-2 text-xs font-bold text-white"><strong className="mr-2">BREAKING NEWS</strong>{settings.breakingFlashText}</div>}
     <div className="flex flex-wrap justify-between gap-2 px-3 py-2 bg-[#091329] border-b border-blue-900/50 text-[10px]">
       <span><strong className="text-red-400 mr-2">NOW SHOWING</strong>{settings.schedulerEnabled && scheduleState.current ? scheduleState.current.title : stream.title}</span>
@@ -101,6 +118,6 @@ export const BroadcastCanvas: React.FC<{ suspended?: boolean }> = ({ suspended =
     {ads && <a href={safeLink(creative?.targetUrl || adBottom.targetUrl)} target="_blank" rel="noreferrer" className="shrink-0 flex items-center gap-3 bg-[#101d39] px-3 border-t border-amber-500/60" style={{ height: Math.max(70, Math.min(90, settings.adBottomHeight || 80)) }}>
       {bottomImage && <img src={bottomImage} alt={creative?.title || adBottom.title} className="h-full max-w-[45%] object-contain" />}<div className="min-w-0"><strong className="block text-xs text-amber-200">{creative?.title || adBottom.title}</strong><span className="text-[10px] text-slate-300">{adBottom.subtitle}</span><span className="block text-[10px] text-blue-300">{phone || 'Learn more'}</span></div>
     </a>}
-    {[{ text: telugu, label: 'తెలుగు', background: `rgba(185,28,28,${settings.tickerOpacity ?? 1})` }, { text: english, label: 'ENGLISH', background: `rgba(9,21,51,${settings.tickerOpacity ?? 1})` }].map(({ text, label, background }) => <div key={label} className="flex gap-3 items-center px-3 py-1.5 text-xs" style={{ backgroundColor: background }}><strong className="shrink-0 text-[10px] text-amber-200">{label}</strong><div className="flex-1 overflow-hidden whitespace-nowrap"><div className="animate-marquee-smooth inline-flex gap-8" style={tickerStyle}><span>{text}</span><span aria-hidden>{text}</span></div></div></div>)}
+    {scrolls.map((scroll) => <div key={scroll.id} data-horizontal-scroll={scroll.id} className="flex gap-3 items-center px-3 py-1.5 text-xs" style={{ backgroundColor: scroll.background || `rgba(9,21,51,${settings.tickerOpacity ?? 1})` }}><strong className="shrink-0 text-[10px] text-amber-200">{scroll.label}</strong><div className="flex-1 overflow-hidden whitespace-nowrap"><div className="animate-marquee-smooth inline-flex gap-8" style={tickerStyle}><span>{scroll.text}</span><span aria-hidden>{scroll.text}</span></div></div></div>)}
   </div>;
 };

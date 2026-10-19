@@ -15,7 +15,7 @@ export const BroadcastScheduler: React.FC = () => {
   const sourceOptions = sources.map((source) => <option key={source.id} value={source.id}>{source.channelName} — {source.title}</option>);
   return <section className="space-y-5 text-sm">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-900/50 pb-4">
-      <div><h3 className="font-black">48-hour broadcast scheduler</h3><p className="text-xs text-slate-400 mt-1">All times are IST. Scheduled sources take priority while automation is enabled.</p></div>
+      <div><h3 className="font-black">48-hour broadcast scheduler</h3><p className="text-xs text-slate-400 mt-1">All times are IST. While automation is on, the live screen plays the program in the current slot, then the fallback feed between programs.</p></div>
       <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!broadcastSettings.schedulerEnabled} onChange={(event) => updateBroadcastSettings({ schedulerEnabled: event.target.checked })} />Enable automation</label>
     </div>
     <label className="block text-xs text-slate-300">Fallback feed for schedule gaps

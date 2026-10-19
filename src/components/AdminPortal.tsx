@@ -955,8 +955,8 @@ export const AdminPortal: React.FC = () => {
                     Broadcast L-Shape (L-Band) Advertisements
                   </h3>
                   <p className="text-[11px] text-slate-300">
-                    Displays broadcast-grade sponsor banners along the bottom and right edges of the
-                    Live Player.
+                    Sponsor images, on-screen duration, and the interval between ads are set in the
+                    rotation panel above. Those ads run on the live screen in that order.
                   </p>
                 </div>
 

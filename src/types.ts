@@ -53,6 +53,19 @@ export interface SponsorCreative {
   bottomImage: string;
   targetUrl: string;
   phone: string;
+  /** Seconds this L-ad stays on the live screen. */
+  durationSeconds?: number;
+  /** Seconds the L-band stays hidden after this ad, before the next one. */
+  intervalSeconds?: number;
+  enabled?: boolean;
+}
+
+export interface HorizontalScroll {
+  id: string;
+  label: string;
+  text: string;
+  enabled?: boolean;
+  background?: string;
 }
 
 export interface LiveStreamConfig {
@@ -81,6 +94,9 @@ export interface BroadcastSettings {
   englishTickerItems?: string[];
   tickerSpeed?: number;
   tickerOpacity?: number;
+  teluguScrollVisible?: boolean;
+  englishScrollVisible?: boolean;
+  horizontalScrolls?: HorizontalScroll[];
   watermarkPosition?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   watermarkScale?: number;
   viewport?: { scale: number; panX: number; panY: number; fit: 'contain' | 'cover' | 'fill' };

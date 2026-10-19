@@ -36,6 +36,7 @@ export const LiveScreenSection: React.FC = () => {
     liveStreams,
     setActiveLiveStream,
     broadcastSettings,
+    scheduleState,
     chatMessages,
     addChatMessage,
   } = useNews();
@@ -49,6 +50,12 @@ export const LiveScreenSection: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isStudioCameraActive = activeLiveStream.streamType === 'webrtc';
+  const scheduleLocked = !!broadcastSettings.schedulerEnabled && (!!scheduleState.current || scheduleState.upcoming.length > 0);
+  const airTitle = scheduleLocked && scheduleState.current ? scheduleState.current.title : activeLiveStream.title;
+  const chooseChannel = (id: string) => {
+    if (scheduleLocked) return;
+    setActiveLiveStream(id);
+  };
 
   // Auto-scroll chat when messages update
   useEffect(() => {
@@ -110,8 +117,13 @@ export const LiveScreenSection: React.FC = () => {
             </span>
 
             <span className="hidden md:inline-block text-xs font-bold text-white truncate max-w-sm lg:max-w-md">
-              {activeLiveStream.title}
+              {airTitle}
             </span>
+            {scheduleLocked && (
+              <span className="hidden lg:inline-block text-[10px] font-bold text-amber-300">
+                {scheduleState.current ? 'ON SCHEDULE' : 'SCHEDULE GAP'}
+              </span>
+            )}
 
             {isStudioCameraActive && (
               <span className="bg-red-500/20 text-red-300 border border-red-500/50 text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
@@ -129,7 +141,8 @@ export const LiveScreenSection: React.FC = () => {
             return (
               <button
                 key={stream.id}
-                onClick={() => setActiveLiveStream(stream.id)}
+                onClick={() => chooseChannel(stream.id)}
+                title={scheduleLocked ? 'The admin schedule is playing on this screen' : stream.channelName}
                 className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer whitespace-nowrap ${
                   isCur
                     ? 'bg-blue-600 text-white border-blue-400 shadow-md'
@@ -342,12 +355,14 @@ export const LiveScreenSection: React.FC = () => {
                 <div className="text-xs font-bold text-white mb-1">
                   అన్ని ప్రసార ఛానెల్స్ (Select Channel to Watch)
                 </div>
+                {scheduleLocked && <p className="text-[11px] text-amber-300">The admin schedule is running on this screen. Turn off automation in Admin to choose a channel by hand.</p>}
                 {liveStreams.map((stream) => {
                   const isCur = stream.id === activeLiveStream.id;
                   return (
                     <div
                       key={stream.id}
-                      onClick={() => setActiveLiveStream(stream.id)}
+                      onClick={() => chooseChannel(stream.id)}
+                      title={scheduleLocked ? 'The admin schedule is playing on this screen' : stream.title}
                       className={`p-2.5 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-all ${
                         isCur
                           ? 'bg-blue-600/90 text-white font-bold border border-blue-400 shadow-md'
